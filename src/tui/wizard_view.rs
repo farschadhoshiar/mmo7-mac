@@ -23,8 +23,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         WizardStep::Recording { probe_idx, started, captured, .. } => {
             render_recording(frame, inner, *probe_idx, *started, captured.len())
         }
-        WizardStep::Result { probe_idx, mappings, .. } => {
-            render_result(frame, inner, *probe_idx, mappings)
+        WizardStep::Result { probe_idx, mappings, capture_stats, .. } => {
+            render_result(frame, inner, *probe_idx, mappings, capture_stats, app)
         }
         WizardStep::Done { save_path, save_error } => {
             render_done(frame, inner, app, save_path.as_ref().map(|p| p.display().to_string()), save_error.as_deref())
@@ -195,8 +195,16 @@ fn render_recording(
     frame.render_widget(gauge, g_area);
 }
 
-fn render_result(frame: &mut Frame, area: Rect, probe_idx: usize, mappings: &[ButtonMapping]) {
+fn render_result(
+    frame: &mut Frame,
+    area: Rect,
+    probe_idx: usize,
+    mappings: &[ButtonMapping],
+    capture_stats: &[(u8, usize)],
+    app: &App,
+) {
     let probe = PROBES[probe_idx];
+    let total_captured: usize = capture_stats.iter().map(|(_, n)| *n).sum();
 
     let mut lines = vec![
         Line::from(vec![
@@ -204,40 +212,80 @@ fn render_result(frame: &mut Frame, area: Rect, probe_idx: usize, mappings: &[Bu
                 format!("{} · ", probe.name),
                 Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "result",
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled("result", Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(""),
     ];
 
-    if mappings.is_empty() {
+    if total_captured == 0 {
         lines.push(Line::from(Span::styled(
-            "No changes detected. Possible reasons:",
-            Style::default().fg(Color::Yellow),
-        )));
-        lines.push(Line::from("  • the input is routed via the standard mouse interface (skipped)"));
-        lines.push(Line::from("  • you didn't press during the recording window"));
-        lines.push(Line::from("  • the button isn't physically present on your variant"));
-    } else {
-        lines.push(Line::from(Span::styled(
-            "Detected changes (top candidate first):",
-            Style::default().fg(Color::Green),
+            "⚠  No reports arrived during the 1.5s recording window.",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
-        for (i, m) in mappings.iter().take(6).enumerate() {
-            let chip = if i == 0 { "▸" } else { " " };
-            let line = format!(
-                "  {} iface[{}] byte {:>2}  mask 0x{:02X}  ({:02X} → {:02X})  ×{}",
-                chip, m.iface_id + 1, m.byte_index, m.mask, m.baseline_value, m.pressed_value, m.occurrences
-            );
-            let style = if i == 0 {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            };
-            lines.push(Line::from(Span::styled(line, style)));
+        if app.seize_mouse {
+            lines.push(Line::from("Mouse interface IS seized — but this button produced no HID traffic."));
+            lines.push(Line::from("Likely causes:"));
+            lines.push(Line::from("  • the button is inert until activated by the Windows driver"));
+            lines.push(Line::from("  • the device requires an init handshake we don't send yet"));
+            lines.push(Line::from("  • the physical button isn't responding (test in any OS)"));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Mouse interface is NOT seized. Quit and re-run with:",
+                Style::default().fg(Color::Yellow),
+            )));
+            lines.push(Line::from(Span::styled(
+                "  cargo run --release -- --seize-mouse",
+                Style::default().fg(Color::Cyan),
+            )));
+        }
+    } else {
+        lines.push(Line::from(format!(
+            "Captured {} reports during press:",
+            total_captured
+        )));
+        let parts: Vec<String> = capture_stats
+            .iter()
+            .map(|(id, n)| format!("iface[{}]={}", id + 1, n))
+            .collect();
+        lines.push(Line::from(Span::styled(
+            format!("  {}", parts.join("  ")),
+            Style::default().fg(Color::DarkGray),
+        )));
+        lines.push(Line::from(""));
+
+        if mappings.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "Reports arrived but no byte changed vs. baseline.",
+                Style::default().fg(Color::Yellow),
+            )));
+            lines.push(Line::from("  • the report carries motion/wheel data unrelated to this button"));
+            lines.push(Line::from("  • try `b` to re-baseline if the idle was noisy"));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Detected changes (top candidate first):",
+                Style::default().fg(Color::Green),
+            )));
+            lines.push(Line::from(""));
+            for (i, m) in mappings.iter().take(6).enumerate() {
+                let chip = if i == 0 { "▸" } else { " " };
+                let line = format!(
+                    "  {} iface[{}] byte {:>2}  mask 0x{:02X}  ({:02X} → {:02X})  ×{}",
+                    chip,
+                    m.iface_id + 1,
+                    m.byte_index,
+                    m.mask,
+                    m.baseline_value,
+                    m.pressed_value,
+                    m.occurrences
+                );
+                let style = if i == 0 {
+                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Gray)
+                };
+                lines.push(Line::from(Span::styled(line, style)));
+            }
         }
     }
 

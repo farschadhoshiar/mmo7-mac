@@ -146,6 +146,7 @@ pub enum WizardStep {
         probe_idx: usize,
         baseline: Baseline,
         mappings: Vec<ButtonMapping>,
+        capture_stats: Vec<(u8, usize)>,
     },
     Done {
         save_path: Option<PathBuf>,
@@ -190,10 +191,17 @@ impl Wizard {
             WizardStep::Recording { probe_idx, baseline, started, captured } => {
                 if now.duration_since(*started) >= RECORD_DURATION {
                     let mappings = diff(baseline, captured);
+                    let mut stat_map: HashMap<u8, usize> = HashMap::new();
+                    for r in captured.iter() {
+                        *stat_map.entry(r.iface.id).or_insert(0) += 1;
+                    }
+                    let mut capture_stats: Vec<(u8, usize)> = stat_map.into_iter().collect();
+                    capture_stats.sort_by_key(|(id, _)| *id);
                     Some(WizardStep::Result {
                         probe_idx: *probe_idx,
                         baseline: baseline.clone(),
                         mappings,
+                        capture_stats,
                     })
                 } else {
                     None
@@ -226,7 +234,7 @@ impl Wizard {
     }
 
     pub fn on_accept(&mut self) {
-        if let WizardStep::Result { probe_idx, baseline, mappings } = &self.step {
+        if let WizardStep::Result { probe_idx, baseline, mappings, .. } = &self.step {
             let probe = PROBES[*probe_idx];
             let chosen = mappings.first().cloned();
             self.results.push(ProbeResult { probe, mapping: chosen });
@@ -247,21 +255,12 @@ impl Wizard {
     }
 
     pub fn on_retry(&mut self) {
-        match &self.step {
-            WizardStep::Result { probe_idx, baseline, .. } => {
-                self.step = WizardStep::Ready {
-                    probe_idx: *probe_idx,
-                    baseline: baseline.clone(),
-                };
-            }
-            WizardStep::Recording { probe_idx, baseline, .. } => {
-                self.step = WizardStep::Ready {
-                    probe_idx: *probe_idx,
-                    baseline: baseline.clone(),
-                };
-            }
-            _ => {}
-        }
+        let (probe_idx, baseline) = match &self.step {
+            WizardStep::Result { probe_idx, baseline, .. } => (*probe_idx, baseline.clone()),
+            WizardStep::Recording { probe_idx, baseline, .. } => (*probe_idx, baseline.clone()),
+            _ => return,
+        };
+        self.step = WizardStep::Ready { probe_idx, baseline };
     }
 
     pub fn on_rebaseline(&mut self) {

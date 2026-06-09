@@ -72,10 +72,18 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
         View::Sniffer => Span::styled(" SNIFFER ", Style::default().bg(Color::Magenta).fg(Color::Black)),
     };
 
+    let seize_chip = if app.seize_mouse {
+        Span::styled(" MOUSE SEIZED ", Style::default().bg(Color::Red).fg(Color::White).add_modifier(Modifier::BOLD))
+    } else {
+        Span::styled(" mouse free ", Style::default().fg(Color::DarkGray))
+    };
+
     let line = Line::from(vec![
         Span::styled(label, Style::default().fg(color).add_modifier(Modifier::BOLD)),
         Span::raw("  "),
         view_chip,
+        Span::raw("  "),
+        seize_chip,
         Span::raw(format!("   total reports: {}", app.total_received)),
     ]);
 
