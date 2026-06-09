@@ -43,16 +43,35 @@ fn split_two(area: Rect, top: u16) -> [Rect; 2] {
 fn render_intro(frame: &mut Frame, area: Rect, app: &App) {
     let opened = app.interfaces().iter().filter(|i| i.opened).count();
     let total = app.interfaces().len();
-    let lines = vec![
+    let mut lines = vec![
         Line::from(Span::styled(
             "Interactive button mapping wizard",
             Style::default().add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(format!(
-            "{} of {} HID interfaces opened (mouse + keyboard skipped)",
+            "{} of {} HID interfaces opened",
             opened, total
         )),
+    ];
+
+    if app.seize_mouse {
+        lines.push(Line::from(Span::styled(
+            "▲ mouse interface SEIZED — cursor is frozen, use keyboard only",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "ℹ mouse interface skipped — only wheel / vendor reports will arrive.",
+            Style::default().fg(Color::Yellow),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  Quit and re-run with --seize-mouse to capture all physical buttons.",
+            Style::default().fg(Color::Yellow),
+        )));
+    }
+
+    lines.extend([
         Line::from(""),
         Line::from("How it works:"),
         Line::from("  1. Don't touch the mouse — we record a 1.5s idle baseline"),
@@ -64,7 +83,7 @@ fn render_intro(frame: &mut Frame, area: Rect, app: &App) {
             "Press SPACE to begin · Tab to switch to sniffer · q to quit",
             Style::default().fg(Color::Cyan),
         )),
-    ];
+    ]);
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 

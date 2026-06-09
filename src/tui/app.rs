@@ -18,6 +18,7 @@ pub struct App {
     pub paused: bool,
     pub follow: bool,
     pub scroll: usize,
+    pub seize_mouse: bool,
     pub connection: ConnectionState,
     pub reports: VecDeque<RawReport>,
     pub started_at: Instant,
@@ -28,13 +29,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(seize_mouse: bool) -> Self {
         Self {
             running: true,
             view: View::Wizard,
             paused: false,
             follow: true,
             scroll: 0,
+            seize_mouse,
             connection: ConnectionState::Searching,
             reports: VecDeque::with_capacity(MAX_REPORTS),
             started_at: Instant::now(),
@@ -133,8 +135,3 @@ impl App {
     }
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
-    }
-}

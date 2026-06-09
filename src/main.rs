@@ -16,10 +16,32 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     init_logging();
 
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_help();
+        return Ok(());
+    }
+    let seize_mouse = args.iter().any(|a| a == "--seize-mouse");
+
     let mut terminal = ratatui::init();
-    let result = run(&mut terminal).await;
+    let result = run(&mut terminal, seize_mouse).await;
     ratatui::restore();
     result
+}
+
+fn print_help() {
+    println!("mmo7-mac — Mad Catz M.M.O. 7+ HID sniffer and mapping wizard");
+    println!();
+    println!("USAGE:");
+    println!("  mmo7-mac [FLAGS]");
+    println!();
+    println!("FLAGS:");
+    println!("  --seize-mouse    Also open the Generic Desktop / Mouse top-level");
+    println!("                   collection. Required to capture standard mouse");
+    println!("                   buttons (sniper, side, thumb-pad). While enabled,");
+    println!("                   the cursor will be frozen — operate the wizard");
+    println!("                   via keyboard only.");
+    println!("  -h, --help       Show this help and exit.");
 }
 
 fn init_logging() {
@@ -28,9 +50,12 @@ fn init_logging() {
     let _ = fmt().with_env_filter(filter).with_writer(std::io::stderr).try_init();
 }
 
-async fn run(terminal: &mut ratatui::DefaultTerminal) -> color_eyre::Result<()> {
-    let DeviceHandles { mut reports, mut state } = spawn_reader();
-    let mut app = App::new();
+async fn run(
+    terminal: &mut ratatui::DefaultTerminal,
+    seize_mouse: bool,
+) -> color_eyre::Result<()> {
+    let DeviceHandles { mut reports, mut state } = spawn_reader(seize_mouse);
+    let mut app = App::new(seize_mouse);
     let mut events = EventStream::new();
     let mut tick = interval(Duration::from_millis(50));
 

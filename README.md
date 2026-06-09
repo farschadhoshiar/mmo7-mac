@@ -26,14 +26,25 @@ Mad Catz only ships Windows drivers for the M.M.O. 7+ (USB `0738:1C02`). This pr
 ## Build & run
 
 ```sh
+# default: skips the mouse interface, cursor keeps working
 cargo run --release
+
+# capture every physical button (cursor will freeze while running)
+cargo run --release -- --seize-mouse
 ```
 
 On first launch, macOS may prompt for **Input Monitoring** permission — grant it in *System Settings → Privacy & Security → Input Monitoring*.
 
-### Why your cursor still works
+### Why two modes?
 
-hidapi on macOS opens HID devices with `kIOHIDOptionsTypeSeizeDevice`, meaning the OS hands over exclusive ownership. To avoid hijacking your pointer/keystrokes, the sniffer **skips the `Generic Desktop / Mouse` and `Generic Desktop / Keyboard` top-level collections** and only opens vendor, consumer, and other auxiliary interfaces. Skipped interfaces appear as `○` in the sidebar.
+hidapi on macOS opens HID devices with `kIOHIDOptionsTypeSeizeDevice`, meaning the OS hands over exclusive ownership. The MMO 7+ routes most physical buttons (sniper, side, thumb pad, mode, shift, 5D) through the standard `Generic Desktop / Mouse` top-level collection, which is the same one macOS uses to drive your cursor.
+
+| Mode | Cursor | Captures |
+|---|---|---|
+| default | works | scroll wheel, consumer, vendor reports |
+| `--seize-mouse` | **frozen** | everything including all physical buttons |
+
+Run the wizard once with `--seize-mouse`, navigate via keyboard, save the mapping, then quit — your cursor returns instantly.
 
 ## Hardware identification
 

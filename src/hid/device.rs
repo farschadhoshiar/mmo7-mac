@@ -48,7 +48,10 @@ impl InterfaceInfo {
         }
     }
 
-    fn should_open(usage_page: u16, usage: u16) -> bool {
+    fn should_open(usage_page: u16, usage: u16, seize_mouse: bool) -> bool {
+        if seize_mouse {
+            return usage_page != 0x01 || usage != 0x06;
+        }
         !matches!((usage_page, usage), (0x01, 0x02) | (0x01, 0x06))
     }
 }
@@ -64,11 +67,11 @@ pub struct DeviceHandles {
     pub state: watch::Receiver<ConnectionState>,
 }
 
-pub fn spawn_reader() -> DeviceHandles {
+pub fn spawn_reader(seize_mouse: bool) -> DeviceHandles {
     let (report_tx, report_rx) = mpsc::channel::<RawReport>(CHANNEL_CAPACITY);
     let (state_tx, state_rx) = watch::channel(ConnectionState::Searching);
 
-    tokio::task::spawn_blocking(move || supervisor(report_tx, state_tx));
+    tokio::task::spawn_blocking(move || supervisor(report_tx, state_tx, seize_mouse));
 
     DeviceHandles { reports: report_rx, state: state_rx }
 }
@@ -83,7 +86,11 @@ struct DeviceSnapshot {
     product_name: String,
 }
 
-fn supervisor(report_tx: mpsc::Sender<RawReport>, state_tx: watch::Sender<ConnectionState>) {
+fn supervisor(
+    report_tx: mpsc::Sender<RawReport>,
+    state_tx: watch::Sender<ConnectionState>,
+    seize_mouse: bool,
+) {
     let mut api = match HidApi::new() {
         Ok(api) => api,
         Err(e) => {
@@ -130,7 +137,8 @@ fn supervisor(report_tx: mpsc::Sender<RawReport>, state_tx: watch::Sender<Connec
         let mut all_infos: Vec<InterfaceInfo> = Vec::new();
         for (i, snap) in snapshots.iter().enumerate() {
             let id = i as u8;
-            let should_open = InterfaceInfo::should_open(snap.usage_page, snap.usage);
+            let should_open =
+                InterfaceInfo::should_open(snap.usage_page, snap.usage, seize_mouse);
 
             let mut info = InterfaceInfo {
                 id,
