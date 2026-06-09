@@ -1,12 +1,36 @@
-use crate::tui::app::App;
+use crate::tui::app::{App, View};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
     match key.code {
-        KeyCode::Esc => app.quit(),
-        KeyCode::Char('q') => app.quit(),
-        KeyCode::Char('c') if ctrl => app.quit(),
+        KeyCode::Esc => return app.quit(),
+        KeyCode::Char('q') => return app.quit(),
+        KeyCode::Char('c') if ctrl => return app.quit(),
+        KeyCode::Tab => return app.toggle_view(),
+        _ => {}
+    }
+
+    match app.view {
+        View::Wizard => handle_wizard_key(app, key),
+        View::Sniffer => handle_sniffer_key(app, key),
+    }
+}
+
+fn handle_wizard_key(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char(' ') => app.wizard.on_space(),
+        KeyCode::Enter => app.wizard.on_accept(),
+        KeyCode::Char('r') => app.wizard.on_retry(),
+        KeyCode::Char('n') => app.wizard.on_skip(),
+        KeyCode::Char('b') => app.wizard.on_rebaseline(),
+        _ => {}
+    }
+}
+
+fn handle_sniffer_key(app: &mut App, key: KeyEvent) {
+    match key.code {
         KeyCode::Char('c') => app.clear(),
         KeyCode::Char('p') | KeyCode::Char(' ') => app.toggle_pause(),
         KeyCode::Char('f') => app.toggle_follow(),

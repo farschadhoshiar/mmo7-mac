@@ -12,8 +12,8 @@ Mad Catz only ships Windows drivers for the M.M.O. 7+ (USB `0738:1C02`). This pr
 
 | Phase | Goal | Status |
 |---|---|---|
-| 0 | Open device, render raw HID reports live in TUI | in progress |
-| 1 | Decode button / mode / shift bits from reports | planned |
+| 0 | Open device, render raw HID reports live in TUI | done |
+| 1 | Interactive wizard: prompt user per button, diff baseline vs press, emit `mmo7-mapping.toml` | done |
 | 2 | Map buttons → key sequences via TOML config + CGEvent | planned |
 | 3 | Reverse-engineer output reports for DPI / RGB / on-board profiles | later |
 
@@ -45,12 +45,36 @@ Expected vendor ID `0x0738` (Mad Catz), product ID `0x1C02`.
 
 ## Controls
 
+Two views, switch with `Tab`.
+
+### Wizard (default)
+
 | Key | Action |
 |---|---|
-| `q` / `Esc` | quit |
-| `↑` / `↓` | scroll report history |
-| `c` | clear report history |
-| `p` | pause / resume capture |
+| `Space` | begin baseline / start recording the current probe |
+| `Enter` | accept the detected mapping, advance to next probe |
+| `r` | retry the current probe |
+| `n` | skip the current probe |
+| `b` | re-baseline (e.g. if you accidentally bumped the mouse) |
+
+When the wizard finishes, the discovered mapping is written to `mmo7-mapping.toml` in the current directory.
+
+### Sniffer (advanced)
+
+| Key | Action |
+|---|---|
+| `p` / `Space` | pause / resume capture |
+| `c` | clear report buffer |
+| `↑↓` / `jk` | scroll |
+| `g` / `G` | jump to top / bottom |
+| `1`–`9` | toggle visibility of an interface |
+
+### Always
+
+| Key | Action |
+|---|---|
+| `Tab` | toggle view |
+| `q` / `Esc` / `Ctrl-C` | quit |
 
 ## License
 

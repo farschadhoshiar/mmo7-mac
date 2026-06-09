@@ -5,3 +5,4 @@ Cargo.lock.bak
 .idea/
 .vscode/
 *.log
+/mmo7-mapping.toml

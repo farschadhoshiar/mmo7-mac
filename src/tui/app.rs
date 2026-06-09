@@ -1,12 +1,20 @@
 use crate::hid::device::{ConnectionState, InterfaceInfo};
 use crate::hid::report::RawReport;
+use crate::wizard::Wizard;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 const MAX_REPORTS: usize = 4096;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    Wizard,
+    Sniffer,
+}
+
 pub struct App {
     pub running: bool,
+    pub view: View,
     pub paused: bool,
     pub follow: bool,
     pub scroll: usize,
@@ -16,12 +24,14 @@ pub struct App {
     pub total_received: u64,
     pub per_iface_counts: HashMap<u8, u64>,
     pub hidden_ifaces: HashSet<u8>,
+    pub wizard: Wizard,
 }
 
 impl App {
     pub fn new() -> Self {
         Self {
             running: true,
+            view: View::Wizard,
             paused: false,
             follow: true,
             scroll: 0,
@@ -31,6 +41,7 @@ impl App {
             total_received: 0,
             per_iface_counts: HashMap::new(),
             hidden_ifaces: HashSet::new(),
+            wizard: Wizard::new(),
         }
     }
 
@@ -44,6 +55,8 @@ impl App {
     pub fn push_report(&mut self, report: RawReport) {
         self.total_received = self.total_received.wrapping_add(1);
         *self.per_iface_counts.entry(report.iface.id).or_insert(0) += 1;
+
+        self.wizard.on_report(&report);
 
         if self.paused || self.hidden_ifaces.contains(&report.iface.id) {
             return;
@@ -106,6 +119,13 @@ impl App {
         } else {
             self.hidden_ifaces.insert(id);
         }
+    }
+
+    pub fn toggle_view(&mut self) {
+        self.view = match self.view {
+            View::Wizard => View::Sniffer,
+            View::Sniffer => View::Wizard,
+        };
     }
 
     pub fn quit(&mut self) {

@@ -1,5 +1,6 @@
 use crate::hid::device::{ConnectionState, InterfaceInfo};
-use crate::tui::app::App;
+use crate::tui::app::{App, View};
+use crate::tui::wizard_view;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -42,7 +43,12 @@ pub fn render(frame: &mut Frame, app: &App) {
         .split(vchunks[1]);
 
     render_interfaces(frame, hchunks[0], app);
-    render_reports(frame, hchunks[1], app);
+
+    match app.view {
+        View::Wizard => wizard_view::render(frame, hchunks[1], app),
+        View::Sniffer => render_reports(frame, hchunks[1], app),
+    }
+
     render_footer(frame, vchunks[2], app);
 }
 
@@ -52,41 +58,31 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
             "● searching for MMO 7+…".to_string(),
             Color::Yellow,
         ),
-        ConnectionState::Connected { interfaces } => (
-            format!("● connected · {} iface(s)", interfaces.len()),
-            Color::Green,
-        ),
+        ConnectionState::Connected { interfaces } => {
+            let opened = interfaces.iter().filter(|i| i.opened).count();
+            (
+                format!("● connected · {}/{} iface(s)", opened, interfaces.len()),
+                Color::Green,
+            )
+        }
     };
 
-    let status_chip = if app.paused {
-        Span::styled(" PAUSED ", Style::default().bg(Color::Red).fg(Color::White))
-    } else {
-        Span::styled(" LIVE ", Style::default().bg(Color::Green).fg(Color::Black))
-    };
-
-    let follow_chip = if app.follow {
-        Span::styled(" follow ", Style::default().fg(Color::Cyan))
-    } else {
-        Span::styled(" freeze ", Style::default().fg(Color::DarkGray))
+    let view_chip = match app.view {
+        View::Wizard => Span::styled(" WIZARD ", Style::default().bg(Color::Cyan).fg(Color::Black)),
+        View::Sniffer => Span::styled(" SNIFFER ", Style::default().bg(Color::Magenta).fg(Color::Black)),
     };
 
     let line = Line::from(vec![
         Span::styled(label, Style::default().fg(color).add_modifier(Modifier::BOLD)),
         Span::raw("  "),
-        status_chip,
-        Span::raw("  "),
-        follow_chip,
-        Span::raw(format!(
-            "  total: {}   shown: {}",
-            app.total_received,
-            app.reports.len()
-        )),
+        view_chip,
+        Span::raw(format!("   total reports: {}", app.total_received)),
     ]);
 
     let header = Paragraph::new(line).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(" mmo7-mac · hid sniffer ")
+            .title(" mmo7-mac ")
             .title_style(Style::default().add_modifier(Modifier::BOLD)),
     );
     frame.render_widget(header, area);
@@ -183,8 +179,11 @@ fn render_reports(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn render_footer(frame: &mut Frame, area: Rect, _app: &App) {
-    let help = " q quit · p pause · c clear · ↑↓/jk scroll · g/G top/bot · f follow · 1-9 hide iface ";
+fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
+    let help = match app.view {
+        View::Wizard => " Wizard: Space act · Enter accept · r retry · n skip · b re-baseline · Tab sniffer · q quit ",
+        View::Sniffer => " Sniffer: p pause · c clear · jk scroll · g/G top/bot · 1-9 hide iface · Tab wizard · q quit ",
+    };
     let footer = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(footer, area);
 }

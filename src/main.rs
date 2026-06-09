@@ -1,5 +1,6 @@
 mod hid;
 mod tui;
+mod wizard;
 
 use crate::hid::device::{DeviceHandles, spawn_reader};
 use crate::tui::app::App;
@@ -37,7 +38,9 @@ async fn run(terminal: &mut ratatui::DefaultTerminal) -> color_eyre::Result<()> 
         terminal.draw(|f| render(f, &app))?;
 
         tokio::select! {
-            _ = tick.tick() => {}
+            _ = tick.tick() => {
+                app.wizard.tick();
+            }
             maybe_evt = events.next() => {
                 if let Some(evt) = maybe_evt {
                     match evt? {
