@@ -1,0 +1,27 @@
+[package]
+name = "mmo7-mac"
+version = "0.1.0"
+edition = "2024"
+description = "Terminal UI configurator for the Mad Catz M.M.O. 7+ wireless gaming mouse on macOS"
+license = "MIT"
+repository = "https://github.com/farschadhoshiar/mmo7-mac"
+readme = "README.md"
+keywords = ["madcatz", "mmo7", "mouse", "hid", "tui"]
+categories = ["command-line-utilities", "hardware-support"]
+
+[dependencies]
+ratatui = "0.30"
+crossterm = { version = "0.29", features = ["event-stream"] }
+hidapi = "2.6"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+color-eyre = "0.6"
+futures = "0.3"
+
+[profile.release]
+lto = "thin"
+strip = true
