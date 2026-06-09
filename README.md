@@ -31,6 +31,10 @@ cargo run --release
 
 On first launch, macOS may prompt for **Input Monitoring** permission — grant it in *System Settings → Privacy & Security → Input Monitoring*.
 
+### Why your cursor still works
+
+hidapi on macOS opens HID devices with `kIOHIDOptionsTypeSeizeDevice`, meaning the OS hands over exclusive ownership. To avoid hijacking your pointer/keystrokes, the sniffer **skips the `Generic Desktop / Mouse` and `Generic Desktop / Keyboard` top-level collections** and only opens vendor, consumer, and other auxiliary interfaces. Skipped interfaces appear as `○` in the sidebar.
+
 ## Hardware identification
 
 ```sh

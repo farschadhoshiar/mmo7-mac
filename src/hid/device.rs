@@ -33,6 +33,7 @@ pub struct InterfaceInfo {
     pub usage: u16,
     pub interface_number: i32,
     pub product_name: String,
+    pub opened: bool,
 }
 
 impl InterfaceInfo {
@@ -45,6 +46,10 @@ impl InterfaceInfo {
             (page, _) if page >= 0xFF00 => "vendor",
             _ => "other",
         }
+    }
+
+    fn should_open(usage_page: u16, usage: u16) -> bool {
+        !matches!((usage_page, usage), (0x01, 0x02) | (0x01, 0x06))
     }
 }
 
@@ -122,37 +127,56 @@ fn supervisor(report_tx: mpsc::Sender<RawReport>, state_tx: watch::Sender<Connec
         }
 
         let mut opened: Vec<(HidDevice, Arc<InterfaceInfo>)> = Vec::new();
+        let mut all_infos: Vec<InterfaceInfo> = Vec::new();
         for (i, snap) in snapshots.iter().enumerate() {
+            let id = i as u8;
+            let should_open = InterfaceInfo::should_open(snap.usage_page, snap.usage);
+
+            let mut info = InterfaceInfo {
+                id,
+                vid: snap.vid,
+                pid: snap.pid,
+                usage_page: snap.usage_page,
+                usage: snap.usage,
+                interface_number: snap.interface_number,
+                product_name: snap.product_name.clone(),
+                opened: false,
+            };
+
+            if !should_open {
+                debug!(
+                    "skipping iface {} ({:04X}:{:04X}) — claimed by macOS",
+                    i, snap.usage_page, snap.usage
+                );
+                all_infos.push(info);
+                continue;
+            }
+
             match api.open_path(&snap.path) {
                 Ok(dev) => {
-                    let info = Arc::new(InterfaceInfo {
-                        id: i as u8,
-                        vid: snap.vid,
-                        pid: snap.pid,
-                        usage_page: snap.usage_page,
-                        usage: snap.usage,
-                        interface_number: snap.interface_number,
-                        product_name: snap.product_name.clone(),
-                    });
-                    opened.push((dev, info));
+                    info.opened = true;
+                    let arc = Arc::new(info.clone());
+                    opened.push((dev, arc));
                 }
                 Err(e) => debug!(
                     "open_path failed for iface {} ({:04X}:{:04X} up={:04X} u={:04X}): {e}",
                     i, snap.vid, snap.pid, snap.usage_page, snap.usage
                 ),
             }
+            all_infos.push(info);
         }
 
         if opened.is_empty() {
+            let _ = state_tx.send(ConnectionState::Connected {
+                interfaces: all_infos,
+            });
             thread::sleep(RECONNECT_DELAY);
             continue;
         }
 
-        let interfaces: Vec<InterfaceInfo> =
-            opened.iter().map(|(_, info)| (**info).clone()).collect();
-        info!("opened {} interfaces", opened.len());
+        info!("opened {}/{} interfaces", opened.len(), snapshots.len());
         let _ = state_tx.send(ConnectionState::Connected {
-            interfaces: interfaces.clone(),
+            interfaces: all_infos,
         });
 
         let mut handles = Vec::with_capacity(opened.len());

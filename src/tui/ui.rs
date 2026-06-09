@@ -114,22 +114,30 @@ fn iface_item<'a>(iface: &InterfaceInfo, app: &App) -> ListItem<'a> {
     let hidden = app.hidden_ifaces.contains(&iface.id);
     let count = app.per_iface_counts.get(&iface.id).copied().unwrap_or(0);
 
-    let visibility = if hidden { "·" } else { "●" };
+    let marker = match (iface.opened, hidden) {
+        (false, _) => "○",
+        (true, true) => "·",
+        (true, false) => "●",
+    };
     let role = iface.role_hint();
     let header = format!(
         "{} [{}] {:<10} {:04X}:{:02X}",
-        visibility,
+        marker,
         iface.id + 1,
         role,
         iface.usage_page,
         iface.usage,
     );
-    let detail = format!("    iface#{}  rcv={}", iface.interface_number, count);
-
-    let header_style = if hidden {
-        Style::default().fg(Color::DarkGray)
+    let detail = if iface.opened {
+        format!("    iface#{}  rcv={}", iface.interface_number, count)
     } else {
-        Style::default().fg(color).add_modifier(Modifier::BOLD)
+        format!("    iface#{}  skipped (OS)", iface.interface_number)
+    };
+
+    let header_style = match (iface.opened, hidden) {
+        (false, _) => Style::default().fg(Color::DarkGray),
+        (true, true) => Style::default().fg(Color::DarkGray),
+        (true, false) => Style::default().fg(color).add_modifier(Modifier::BOLD),
     };
     let detail_style = Style::default().fg(Color::DarkGray);
 
