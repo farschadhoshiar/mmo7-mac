@@ -53,7 +53,8 @@ async fn run(terminal: &mut ratatui::DefaultTerminal) -> color_eyre::Result<()> 
                 }
             }
             Ok(()) = state.changed() => {
-                app.connection = *state.borrow_and_update();
+                app.connection = state.borrow_and_update().clone();
+                app.on_connection_changed();
             }
         }
     }

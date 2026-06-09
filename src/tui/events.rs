@@ -16,6 +16,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::PageDown => app.scroll_down(10),
         KeyCode::Home | KeyCode::Char('g') => app.jump_top(),
         KeyCode::End | KeyCode::Char('G') => app.jump_bottom(),
+        KeyCode::Char(d @ '1'..='9') => {
+            let id = (d as u8) - b'1';
+            app.toggle_iface_visibility(id);
+        }
         _ => {}
     }
 }

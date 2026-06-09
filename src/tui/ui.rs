@@ -1,4 +1,4 @@
-use crate::hid::device::ConnectionState;
+use crate::hid::device::{ConnectionState, InterfaceInfo};
 use crate::tui::app::App;
 use ratatui::{
     Frame,
@@ -8,8 +8,24 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
+const IFACE_COLORS: &[Color] = &[
+    Color::Cyan,
+    Color::Magenta,
+    Color::Yellow,
+    Color::Green,
+    Color::LightBlue,
+    Color::LightRed,
+    Color::LightMagenta,
+    Color::White,
+    Color::Blue,
+];
+
+fn iface_color(id: u8) -> Color {
+    IFACE_COLORS[(id as usize) % IFACE_COLORS.len()]
+}
+
 pub fn render(frame: &mut Frame, app: &App) {
-    let chunks = Layout::default()
+    let vchunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
@@ -18,19 +34,26 @@ pub fn render(frame: &mut Frame, app: &App) {
         ])
         .split(frame.area());
 
-    render_header(frame, chunks[0], app);
-    render_reports(frame, chunks[1], app);
-    render_footer(frame, chunks[2], app);
+    render_header(frame, vchunks[0], app);
+
+    let hchunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(34), Constraint::Min(0)])
+        .split(vchunks[1]);
+
+    render_interfaces(frame, hchunks[0], app);
+    render_reports(frame, hchunks[1], app);
+    render_footer(frame, vchunks[2], app);
 }
 
 fn render_header(frame: &mut Frame, area: Rect, app: &App) {
-    let (label, color) = match app.connection {
+    let (label, color) = match &app.connection {
         ConnectionState::Searching => (
             "● searching for MMO 7+…".to_string(),
             Color::Yellow,
         ),
-        ConnectionState::Connected { vid, pid } => (
-            format!("● connected ({:04X}:{:04X})", vid, pid),
+        ConnectionState::Connected { interfaces } => (
+            format!("● connected · {} iface(s)", interfaces.len()),
             Color::Green,
         ),
     };
@@ -54,7 +77,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
         Span::raw("  "),
         follow_chip,
         Span::raw(format!(
-            "  reports: {}   buffered: {}",
+            "  total: {}   shown: {}",
             app.total_received,
             app.reports.len()
         )),
@@ -69,17 +92,70 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(header, area);
 }
 
+fn render_interfaces(frame: &mut Frame, area: Rect, app: &App) {
+    let block = Block::default().borders(Borders::ALL).title(" interfaces ");
+
+    let ifaces = app.interfaces();
+    if ifaces.is_empty() {
+        let p = Paragraph::new("waiting for device…")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(block);
+        frame.render_widget(p, area);
+        return;
+    }
+
+    let items: Vec<ListItem> = ifaces.iter().map(|i| iface_item(i, app)).collect();
+    let list = List::new(items).block(block);
+    frame.render_widget(list, area);
+}
+
+fn iface_item<'a>(iface: &InterfaceInfo, app: &App) -> ListItem<'a> {
+    let color = iface_color(iface.id);
+    let hidden = app.hidden_ifaces.contains(&iface.id);
+    let count = app.per_iface_counts.get(&iface.id).copied().unwrap_or(0);
+
+    let visibility = if hidden { "·" } else { "●" };
+    let role = iface.role_hint();
+    let header = format!(
+        "{} [{}] {:<10} {:04X}:{:02X}",
+        visibility,
+        iface.id + 1,
+        role,
+        iface.usage_page,
+        iface.usage,
+    );
+    let detail = format!("    iface#{}  rcv={}", iface.interface_number, count);
+
+    let header_style = if hidden {
+        Style::default().fg(Color::DarkGray)
+    } else {
+        Style::default().fg(color).add_modifier(Modifier::BOLD)
+    };
+    let detail_style = Style::default().fg(Color::DarkGray);
+
+    ListItem::new(vec![
+        Line::from(Span::styled(header, header_style)),
+        Line::from(Span::styled(detail, detail_style)),
+    ])
+}
+
 fn render_reports(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
         .reports
         .iter()
-        .enumerate()
-        .map(|(i, r)| {
+        .map(|r| {
             let ms = r.ts.duration_since(app.started_at).as_millis();
-            let prefix = format!("{:>5}  +{:>8}ms  [{:>2}b]  ", i, ms, r.bytes.len());
+            let tag = format!("[{}]", r.iface.id + 1);
+            let prefix = format!(" +{:>8}ms  {:>2}b  ", ms, r.bytes.len());
             let line = Line::from(vec![
+                Span::styled(
+                    tag,
+                    Style::default()
+                        .fg(iface_color(r.iface.id))
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(prefix, Style::default().fg(Color::DarkGray)),
-                Span::styled(r.hex(), Style::default().fg(Color::Cyan)),
+                Span::styled(r.hex(), Style::default().fg(Color::White)),
                 Span::raw("   "),
                 Span::styled(r.ascii(), Style::default().fg(Color::Gray)),
             ]);
@@ -88,7 +164,6 @@ fn render_reports(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let block = Block::default().borders(Borders::ALL).title(" reports ");
-
     let list = List::new(items)
         .block(block)
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
@@ -101,7 +176,7 @@ fn render_reports(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_footer(frame: &mut Frame, area: Rect, _app: &App) {
-    let help = " q/Esc quit · p/space pause · c clear · ↑↓/jk scroll · PgUp/PgDn ±10 · g/G top/bot · f follow ";
+    let help = " q quit · p pause · c clear · ↑↓/jk scroll · g/G top/bot · f follow · 1-9 hide iface ";
     let footer = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(footer, area);
 }
